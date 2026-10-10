@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moni Minutes | Secure Login</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="auth-body">
+    <div class="auth-shell">
+      <div class="auth-panel left-panel">
+        <div class="brand-block">
+          <div class="brand-mark">M</div>
+          <div>
+            <p class="eyebrow">Moni Minutes</p>
+            <h1>Modern treasury operations</h1>
+          </div>
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <strong>Realtime balances</strong>
+            <span>Track USD and NGN liquidity at a glance</span>
+          </div>
+          <div class="feature-item">
+            <strong>Secure approvals</strong>
+            <span>Pending transfer review for risk and treasury teams</span>
+          </div>
+          <div class="feature-item">
+            <strong>Audit trail</strong>
+            <span>Persistent records and full transaction visibility</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-panel right-panel">
+        <div class="auth-card">
+          <p class="eyebrow accent">Welcome back</p>
+          <h2 id="authTitle">Sign in</h2>
+
+          <div class="auth-toggle">
+            <button class="toggle-btn active" id="loginToggle" type="button">Login</button>
+            <button class="toggle-btn" id="registerToggle" type="button">Register</button>
+          </div>
+
+          <form id="authForm">
+            <div id="registerFields" class="hidden">
+              <div class="field-grid two">
+                <label>
+                  <span>First name</span>
+                  <input type="text" id="firstName" placeholder="Jane" />
+                </label>
+                <label>
+                  <span>Last name</span>
+                  <input type="text" id="lastName" placeholder="Doe" />
+                </label>
+              </div>
+            </div>
+
+            <label>
+              <span>Email</span>
+              <input type="email" id="email" placeholder="name@moniminutes.com" required />
+            </label>
+
+            <label>
+              <span>Password</span>
+              <input type="password" id="password" placeholder="••••••••" required />
+            </label>
+
+            <button class="primary-btn wide" type="submit" id="authSubmit">Login</button>
+          </form>
+
+          <div class="demo-box">
+            <p>Demo credentials</p>
+            <ul>
+              <li>Admin: admin@moniminutes.local / Admin@12345</li>
+              <li>User: demo@moniminutes.local / Demo@12345</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

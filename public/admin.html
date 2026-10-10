@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moni Minutes | Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="app-body">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">M</div>
+        <div>
+          <h3>Moni Minutes</h3>
+          <small>Portfolio</small>
+        </div>
+      </div>
+
+      <nav class="side-nav">
+        <a href="/dashboard" class="active">Overview</a>
+        <a href="/admin">Admin panel</a>
+        <a href="#" id="logoutBtn">Log out</a>
+      </nav>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Operations</p>
+          <h2>Portfolio dashboard</h2>
+        </div>
+        <div class="user-pill" id="userBadge">Loading...</div>
+      </header>
+
+      <section id="metrics" class="metrics-row"></section>
+
+      <section class="content-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Accounts</h3>
+          </div>
+          <div id="accountList" class="account-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Transfer form</h3>
+          </div>
+
+          <form id="transferForm" class="stack-form">
+            <label>
+              <span>Sender account</span>
+              <select id="senderId"></select>
+            </label>
+
+            <label>
+              <span>Receiver account</span>
+              <select id="receiverId"></select>
+            </label>
+
+            <div class="field-grid two">
+              <label>
+                <span>Currency</span>
+                <select id="currency">
+                  <option value="USD">USD</option>
+                  <option value="NGN">NGN</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Amount</span>
+                <input id="amount" type="number" min="1" step="0.01" placeholder="0.00" required />
+              </label>
+            </div>
+
+            <label>
+              <span>Description</span>
+              <input id="description" type="text" placeholder="Transfer description" />
+            </label>
+
+            <button class="primary-btn wide" type="submit">Create pending transfer</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel full-width-panel">
+        <div class="panel-header with-action">
+          <h3>Recent transactions</h3>
+        </div>
+        <div id="transactionTable" class="table-wrap"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
