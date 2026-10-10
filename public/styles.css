@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moni Minutes Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-box">
+          <div class="brand-mark">M</div>
+          <div>
+            <h1>Moni Minutes</h1>
+            <small>Funds Platform</small>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="#" class="active">Overview</a>
+          <a href="#transactions">Transactions</a>
+          <a href="#accounts">Accounts</a>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Finance overview</p>
+            <h2>Transfer dashboard</h2>
+          </div>
+          <button class="action-btn primary" id="refreshBtn">Refresh</button>
+        </header>
+
+        <section class="summary-cards" id="metrics"></section>
+
+        <section class="panel split-panel" id="accounts">
+          <div class="panel-header">
+            <h3>Accounts</h3>
+          </div>
+          <div id="accountList" class="account-list"></div>
+        </section>
+
+        <section class="panel transaction-panel" id="transactions">
+          <div class="panel-header with-action">
+            <h3>Recent transactions</h3>
+            <button class="action-btn" id="toggleFormBtn">New transfer</button>
+          </div>
+
+          <form id="transferForm" class="transfer-form hidden">
+            <div class="field-row">
+              <label>
+                <span>Sender</span>
+                <select id="senderId"></select>
+              </label>
+              <label>
+                <span>Receiver</span>
+                <select id="receiverId"></select>
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>
+                <span>Currency</span>
+                <select id="currency">
+                  <option value="USD">USD</option>
+                  <option value="NGN">NGN</option>
+                </select>
+              </label>
+              <label>
+                <span>Amount</span>
+                <input id="amount" type="number" min="1" step="0.01" placeholder="0.00" />
+              </label>
+            </div>
+
+            <div class="field-row single">
+              <label>
+                <span>Description</span>
+                <input id="description" type="text" placeholder="Transfer description" />
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button class="action-btn primary" type="submit">Submit transfer</button>
+            </div>
+          </form>
+
+          <div id="transactionTable" class="transaction-table"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

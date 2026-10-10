@@ -1,0 +1,230 @@
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+const fs = require('fs');
+
+const dbDir = path.join(__dirname, 'data');
+const dbPath = path.join(dbDir, 'moni_minutes.db');
+
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+const db = new sqlite3.Database(dbPath);
+
+function runSQL(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve({ id: this.lastID, changes: this.changes });
+    });
+  });
+}
+
+function getSQL(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(rows);
+    });
+  });
+}
+
+async function initializeDatabase() {
+  await runSQL(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      currency TEXT NOT NULL CHECK(currency IN ('USD', 'NGN')),
+      balance REAL NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await runSQL(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id TEXT PRIMARY KEY,
+      sender_id TEXT NOT NULL,
+      receiver_id TEXT NOT NULL,
+      currency TEXT NOT NULL CHECK(currency IN ('USD', 'NGN')),
+      amount REAL NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending', 'settled', 'failed')) DEFAULT 'pending',
+      description TEXT DEFAULT '',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(sender_id) REFERENCES accounts(id),
+      FOREIGN KEY(receiver_id) REFERENCES accounts(id)
+    )
+  `);
+
+  const defaultAccounts = [
+    { id: 'acct_usd', name: 'USD Treasury Account', currency: 'USD', balance: 200000.0 },
+    { id: 'acct_ngn', name: 'NGN Treasury Account', currency: 'NGN', balance: 10000000.0 },
+    { id: 'acct_receiver_usd', name: 'Receiver USD Account', currency: 'USD', balance: 0.0 },
+    { id: 'acct_receiver_ngn', name: 'Receiver NGN Account', currency: 'NGN', balance: 0.0 }
+  ];
+
+  for (const account of defaultAccounts) {
+    const existing = await getSQL('SELECT id FROM accounts WHERE id = ?', [account.id]);
+    if (existing.length === 0) {
+      await runSQL(
+        `INSERT INTO accounts (id, name, currency, balance) VALUES (?, ?, ?, ?)`,
+        [account.id, account.name, account.currency, account.balance]
+      );
+    }
+  }
+}
+
+async function getAccounts() {
+  return getSQL('SELECT * FROM accounts ORDER BY name ASC');
+}
+
+async function getTransactions() {
+  return getSQL(`
+    SELECT t.*, s.name as sender_name, r.name as receiver_name
+    FROM transactions t
+    JOIN accounts s ON s.id = t.sender_id
+    JOIN accounts r ON r.id = t.receiver_id
+    ORDER BY datetime(t.created_at) DESC
+  `);
+}
+
+async function getDashboardSummary() {
+  const accounts = await getAccounts();
+  const transactions = await getTransactions();
+
+  const totalBalanceUsd = accounts
+    .filter((account) => account.currency === 'USD')
+    .reduce((total, account) => total + Number(account.balance), 0);
+
+  const totalBalanceNgn = accounts
+    .filter((account) => account.currency === 'NGN')
+    .reduce((total, account) => total + Number(account.balance), 0);
+
+  const pendingCount = transactions.filter((item) => item.status === 'pending').length;
+  const settledCount = transactions.filter((item) => item.status === 'settled').length;
+  const failedCount = transactions.filter((item) => item.status === 'failed').length;
+
+  return {
+    accounts,
+    metrics: {
+      totalBalanceUsd,
+      totalBalanceNgn,
+      pendingCount,
+      settledCount,
+      failedCount,
+      totalTransactions: transactions.length
+    },
+    recentTransactions: transactions.slice(0, 10)
+  };
+}
+
+async function createTransaction({ senderId, receiverId, currency, amount, description = ''}) {
+  if (!senderId || !receiverId || !currency) {
+    throw new Error('senderId, receiverId and currency are required.');
+  }
+
+  if (!['USD', 'NGN'].includes(currency.toUpperCase())) {
+    throw new Error('Unsupported currency. Use USD or NGN.');
+  }
+
+  const amountValue = Number(amount);
+  if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    throw new Error('Amount must be a positive number.');
+  }
+
+  const sender = await getSQL('SELECT * FROM accounts WHERE id = ?', [senderId]);
+  const receiver = await getSQL('SELECT * FROM accounts WHERE id = ?', [receiverId]);
+
+  if (!sender.length) {
+    throw new Error(`Sender account ${senderId} not found.`);
+  }
+
+  if (!receiver.length) {
+    throw new Error(`Receiver account ${receiverId} not found.`);
+  }
+
+  if (sender[0].currency !== currency.toUpperCase()) {
+    throw new Error(`Sender currency does not match transfer currency (${currency}).`);
+  }
+
+  if (receiver[0].currency !== currency.toUpperCase()) {
+    throw new Error(`Receiver currency does not match transfer currency (${currency}).`);
+  }
+
+  if (Number(sender[0].balance) < amountValue) {
+    throw new Error(`Insufficient funds. Available: ${sender[0].balance} ${currency}.`);
+  }
+
+  const transactionId = `txn_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+  const now = new Date().toISOString();
+
+  await runSQL(
+    `INSERT INTO transactions (id, sender_id, receiver_id, currency, amount, status, description, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    [transactionId, senderId, receiverId, currency.toUpperCase(), amountValue, description, now, now]
+  );
+
+  const saved = await getSQL('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+  return saved[0];
+}
+
+async function approveTransaction(transactionId) {
+  const txnRows = await getSQL('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+  if (!txnRows.length) {
+    throw new Error('Transaction not found.');
+  }
+
+  const transaction = txnRows[0];
+  if (transaction.status !== 'pending') {
+    throw new Error(`Transfer is already ${transaction.status}.`);
+  }
+
+  const sender = await getSQL('SELECT * FROM accounts WHERE id = ?', [transaction.sender_id]);
+  const receiver = await getSQL('SELECT * FROM accounts WHERE id = ?', [transaction.receiver_id]);
+
+  if (!sender.length || !receiver.length) {
+    throw new Error('Sender or receiver account is missing.');
+  }
+
+  const newSenderBalance = Number(sender[0].balance) - Number(transaction.amount);
+  const newReceiverBalance = Number(receiver[0].balance) + Number(transaction.amount);
+
+  await runSQL('UPDATE accounts SET balance = ? WHERE id = ?', [newSenderBalance, transaction.sender_id]);
+  await runSQL('UPDATE accounts SET balance = ? WHERE id = ?', [newReceiverBalance, transaction.receiver_id]);
+  await runSQL('UPDATE transactions SET status = ?, updated_at = ? WHERE id = ?', ['settled', new Date().toISOString(), transactionId]);
+
+  const updated = await getSQL('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+  return updated[0];
+}
+
+async function rejectTransaction(transactionId, reason = 'Rejected by admin') {
+  const txnRows = await getSQL('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+  if (!txnRows.length) {
+    throw new Error('Transaction not found.');
+  }
+
+  const transaction = txnRows[0];
+  if (transaction.status !== 'pending') {
+    throw new Error(`Transfer is already ${transaction.status}.`);
+  }
+
+  await runSQL('UPDATE transactions SET status = ?, description = ?, updated_at = ? WHERE id = ?', ['failed', reason, new Date().toISOString(), transactionId]);
+  const updated = await getSQL('SELECT * FROM transactions WHERE id = ?', [transactionId]);
+  return updated[0];
+}
+
+module.exports = {
+  initializeDatabase,
+  getAccounts,
+  getDashboardSummary,
+  getTransactions,
+  createTransaction,
+  approveTransaction,
+  rejectTransaction
+};
