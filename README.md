@@ -1,7 +1,17 @@
-const token = localStorage.getItem('moniMinutesToken');
 const page = window.location.pathname;
 
+const getStoredToken = () => localStorage.getItem('moniMinutesToken');
+const setStoredToken = (token) => localStorage.setItem('moniMinutesToken', token);
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('moniMinutesUser') || 'null');
+  } catch {
+    return null;
+  }
+};
+
 const api = async (url, options = {}) => {
+  const token = getStoredToken();
   const headers = { ...(options.headers || {}) };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -29,26 +39,16 @@ const formatMoney = (value, currency) => {
   return `${number.toLocaleString()}`;
 };
 
-const setAuthState = (user) => {
-  if (user && user.id) {
-    localStorage.setItem('moniMinutesUser', JSON.stringify(user));
-  }
-};
-
-const redirectIfLoggedIn = () => {
-  if (page === '/' || page === '/login') {
-    const user = localStorage.getItem('moniMinutesUser');
-    const savedToken = localStorage.getItem('moniMinutesToken');
-    if (savedToken && user) {
-      window.location.href = '/dashboard';
-    }
-  }
-};
-
 const logout = () => {
   localStorage.removeItem('moniMinutesToken');
   localStorage.removeItem('moniMinutesUser');
   window.location.href = '/';
+};
+
+const redirectIfLoggedIn = () => {
+  if ((page === '/' || page === '/login') && getStoredToken() && getStoredUser()) {
+    window.location.href = '/dashboard';
+  }
 };
 
 const setupAuth = () => {
@@ -60,11 +60,30 @@ const setupAuth = () => {
   const authSubmit = document.getElementById('authSubmit');
   const registerFields = document.getElementById('registerFields');
   const authForm = document.getElementById('authForm');
+  const resetRequestForm = document.getElementById('resetRequestForm');
+
+  if (resetRequestForm) {
+    resetRequestForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const email = document.getElementById('resetEmail').value;
+      try {
+        const response = await fetch('/api/auth/password-reset-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to process request');
+        alert(`Reset link generated: ${data.resetUrl}`);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  }
 
   if (!loginToggle || !registerToggle || !authForm) return;
 
   let mode = 'login';
-
   const setMode = (nextMode) => {
     mode = nextMode;
     const isRegister = mode === 'register';
@@ -92,19 +111,19 @@ const setupAuth = () => {
 
     try {
       const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const result = await fetch(endpoint, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await result.json();
-      if (!result.ok) {
+      const data = await response.json();
+      if (!response.ok) {
         throw new Error(data.error || 'Authentication failed');
       }
 
-      localStorage.setItem('moniMinutesToken', data.token);
-      setAuthState(data.user);
+      setStoredToken(data.token);
+      localStorage.setItem('moniMinutesUser', JSON.stringify(data.user));
       window.location.href = '/dashboard';
     } catch (error) {
       alert(error.message);
@@ -133,7 +152,7 @@ const renderMetrics = (metrics) => {
   `).join('');
 };
 
-const renderAdminMetrics = (metrics) => {
+const renderAdminMetrics = (metrics, users) => {
   const root = document.getElementById('adminMetrics');
   if (!root) return;
 
@@ -142,7 +161,7 @@ const renderAdminMetrics = (metrics) => {
     { label: 'NGN volume', value: formatMoney(metrics.totalBalanceNgn, 'NGN'), tone: 'blue' },
     { label: 'Pending', value: metrics.pendingCount, tone: 'amber' },
     { label: 'Settled', value: metrics.settledCount, tone: 'green' },
-    { label: 'Users', value: metrics.users ? metrics.users.length : 0, tone: 'red' },
+    { label: 'Users', value: users ? users.length : 0, tone: 'red' },
   ];
 
   root.innerHTML = cards.map((card) => `
@@ -256,16 +275,49 @@ const renderTransactions = (transactions) => {
   });
 };
 
-const renderUser = async () => {
+const renderUserBadge = async () => {
   const badge = document.getElementById('userBadge');
   if (!badge) return;
 
   try {
     const user = await api('/api/auth/me');
-    setAuthState(user);
+    localStorage.setItem('moniMinutesUser', JSON.stringify(user));
     badge.textContent = `${user.firstName} ${user.lastName} · ${user.role}`;
   } catch (error) {
     logout();
+  }
+};
+
+const renderCharts = async () => {
+  const canvas = document.getElementById('chartCanvas');
+  if (!canvas) return;
+
+  try {
+    const history = await api('/api/analytics/balance-history');
+    const ctx = canvas.getContext('2d');
+    const labels = history.map((item) => item.label);
+    const values = history.map((item) => Number(item.value));
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Balance overview',
+          data: values,
+          backgroundColor: ['#4ac5ff', '#5a7cff', '#7c6cff', '#2ad6a3'],
+          borderRadius: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+  } catch (error) {
+    console.error('Chart failed', error);
   }
 };
 
@@ -275,7 +327,8 @@ const loadDashboard = async () => {
     renderMetrics(summary.metrics);
     renderAccounts(summary.accounts);
     renderTransactions(summary.recentTransactions);
-    await renderUser();
+    await renderUserBadge();
+    await renderCharts();
   } catch (error) {
     alert(error.message);
   }
@@ -284,16 +337,16 @@ const loadDashboard = async () => {
 const loadAdmin = async () => {
   try {
     const summary = await api('/api/admin/summary');
-    renderAdminMetrics(summary.metrics);
+    renderAdminMetrics(summary.metrics, summary.users);
     renderTransactions(summary.recentTransactions);
-    await renderUser();
+    await renderUserBadge();
   } catch (error) {
     alert(error.message);
   }
 };
 
 const setupDashboard = async () => {
-  const tokenValue = localStorage.getItem('moniMinutesToken');
+  const tokenValue = getStoredToken();
   if (!tokenValue) {
     window.location.href = '/';
     return;
@@ -317,7 +370,7 @@ const setupDashboard = async () => {
 
         try {
           await api('/api/transactions', { method: 'POST', body: JSON.stringify(payload) });
-          document.getElementById('transferForm').reset();
+          transferForm.reset();
           await loadDashboard();
           alert('Transfer created and marked as pending.');
         } catch (error) {
@@ -329,11 +382,17 @@ const setupDashboard = async () => {
     }
   }
 
+  if (document.getElementById('exportCsvBtn')) {
+    document.getElementById('exportCsvBtn').addEventListener('click', async () => {
+      window.location.href = '/api/transactions/export.csv';
+    });
+  }
+
   await loadDashboard();
 };
 
 const setupAdmin = async () => {
-  const tokenValue = localStorage.getItem('moniMinutesToken');
+  const tokenValue = getStoredToken();
   if (!tokenValue) {
     window.location.href = '/';
     return;
@@ -351,6 +410,31 @@ const setupAdmin = async () => {
   }
 
   await loadAdmin();
+};
+
+const setupResetPassword = () => {
+  const form = document.getElementById('resetPasswordForm');
+  if (!form) return;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const token = document.getElementById('resetToken').value;
+    const password = document.getElementById('newPassword').value;
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Password reset failed');
+      alert('Password reset successful. Redirecting to login.');
+      window.location.href = '/';
+    } catch (error) {
+      alert(error.message);
+    }
+  });
 };
 
 const logoutBtn = document.getElementById('logoutBtn');
@@ -373,14 +457,6 @@ if (page === '/admin') {
   setupAdmin();
 }
 
-if (page === '/' || page === '/login') {
-  const storedUser = localStorage.getItem('moniMinutesUser');
-  if (storedUser) {
-    try {
-      const parsed = JSON.parse(storedUser);
-      if (parsed.role === 'admin') {
-        document.getElementById('authTitle').textContent = 'Welcome admin';
-      }
-    } catch (error) {}
-  }
+if (page === '/reset-password') {
+  setupResetPassword();
 }
